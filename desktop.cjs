@@ -40,7 +40,7 @@ else{
   await fs.mkdir(home,{recursive:true});
   const defaults=JSON.parse(await fs.readFile(path.join(__dirname,'release-config.json'),'utf8'));
   updates=new UpdateService({home,root:process.env.JARVIS_DISTRIBUTION_ROOT,version:require('./package.json').version,defaultRepository:defaults.repository,notify:state=>{if(win&&!win.isDestroyed())win.webContents.send('jarvis:update',state);}});await updates.load();
-  process.env.JARVIS_PORT='3214';
+  process.env.JARVIS_PORT=smoke?'3215':'3214';
   const module=await import(pathToFileURL(path.join(__dirname,'server.mjs')).href);backend=module.server;stopComputer=module.stopComputer;shutdown=module.shutdown;
   const native=await import(pathToFileURL(path.join(__dirname,'system-tools.mjs')).href);
   closeNativeWorker=native.closeNativeWorker;
@@ -73,8 +73,8 @@ else{
   });
   native.executeNative('system_status',{}).then(state=>module.setNativeStatus({elevated:state.elevated,nativeAvailable:true,helperVersion:state.version})).catch(error=>module.setNativeStatus({lastError:error.message,nativeAvailable:false}));
   globalShortcut.register('Control+Alt+Escape',()=>{stopComputer();win?.webContents.send('jarvis:emergency-stop');});
-  await new Promise((resolve,reject)=>{backend.once('error',reject);backend.listen(3214,'127.0.0.1',resolve);});
-  origin='http://127.0.0.1:3214';Menu.setApplicationMenu(null);
+  await new Promise((resolve,reject)=>{backend.once('error',reject);backend.listen(Number(process.env.JARVIS_PORT),'127.0.0.1',resolve);});
+  origin='http://127.0.0.1:'+process.env.JARVIS_PORT;Menu.setApplicationMenu(null);
   win=new BrowserWindow({width:1280,height:830,minWidth:940,minHeight:680,show:false,frame:false,title:'JARVIS',icon:path.join(__dirname,'assets','jarvis.ico'),backgroundColor:'#080d15',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true,backgroundThrottling:false}});
   const notifyVisibility=()=>{if(win&&!win.isDestroyed())win.webContents.send('jarvis:visibility',win.isMinimized()||!win.isVisible());};for(const event of ['minimize','restore','hide','show'])win.on(event,notifyVisibility);win.webContents.on('did-finish-load',notifyVisibility);
   if(!smoke)trayController=installTray({app,win,Tray,Menu,icon:nativeImage.createFromPath(path.join(__dirname,'tray.png')),onStop:stopComputer,onCommand:command=>win.webContents.send('jarvis:command',command)});
@@ -91,7 +91,7 @@ else{
   });
   ipcMain.handle('jarvis:updates',async(e,action,data)=>{if(!trusted(e))throw Error('Untrusted page');if(action==='state')return updates.state();if(action==='save'){updates.stop();const state=await updates.save(data);updates.start();return state;}if(action==='check')return updates.check();if(action==='download')return updates.download();if(action==='restart'){if(!updates.ready)throw Error('Обновление ещё не готово.');await updates.activate();app.relaunch({execPath:path.join(process.env.JARVIS_DISTRIBUTION_ROOT,'JARVIS.exe'),args:[]});app.quit();return updates.state();}throw Error('Unknown update action');});
   ipcMain.handle('jarvis:journal',async(e,action,data)=>{if(!trusted(e))throw Error('Untrusted page');return journal.command(action,data);});
-  ipcMain.handle('jarvis:services',async(e,action,data={})=>{if(!trusted(e))throw Error('Untrusted page');if(action==='spotify-connect')return services.spotify.connect(data.clientId);if(action==='spotify-refresh')return services.spotify.refresh();if(action==='spotify-disconnect')return services.spotify.disconnect();if(action==='spotify-device')return services.spotify.selectDevice(data.deviceId);if(action==='spotify-command')return module.musicAction(data.action,'spotify',data);if(action==='state')return services.state();if(action==='save')return services.save(data);if(action==='open')return services.open();if(action==='connect'){await services.save({musicProvider:'vk',vkLibrary:data.vkLibrary});return services.open();}if(action==='close'){services.close();return {ok:true};}if(action==='disconnect')return services.disconnect();if(action==='command')return module.musicAction(data.action,'vk',data);if(action==='youtube'){await shell.openExternal('https://music.youtube.com');return {ok:true};}throw Error('Unknown service action');});
+  ipcMain.handle('jarvis:services',async(e,action,data={})=>{if(!trusted(e))throw Error('Untrusted page');if(action==='spotify-connect')return services.spotify.connect(data.clientId);if(action==='spotify-refresh')return services.spotify.refresh();if(action==='spotify-disconnect')return services.spotify.disconnect();if(action==='spotify-device')return services.spotify.selectDevice(data.deviceId);if(action==='spotify-command')return module.musicAction(data.action,'spotify',data);if(action==='state')return services.state();if(action==='save')return services.save(data);if(action==='open')return services.open({background:false});if(action==='connect'){await services.save({musicProvider:'vk',vkLibrary:data.vkLibrary});return services.open({background:false});}if(action==='close'){services.close();return {ok:true};}if(action==='disconnect')return services.disconnect();if(action==='command')return module.musicAction(data.action,'vk',data);if(action==='youtube'){await shell.openExternal('https://music.youtube.com');return {ok:true};}throw Error('Unknown service action');});
   ipcMain.handle('jarvis:load',e=>{if(!trusted(e))throw Error('Untrusted page');return loadSettings();});
   ipcMain.handle('jarvis:save',(e,data)=>{if(!trusted(e))throw Error('Untrusted page');return saveSettings(data);});
   ipcMain.handle('jarvis:forget',async e=>{if(!trusted(e))throw Error('Untrusted page');await fs.rm(settingsFile,{force:true});return true;});
@@ -109,7 +109,7 @@ else{
      const fake={key:'smoke-test-not-a-real-key',model:'test-model',control:false};await saveSettings(fake);
      const loaded=await loadSettings();if(loaded.key!==fake.key)throw Error('Credential round trip failed');
      const disk=await fs.readFile(settingsFile);if(disk.includes(Buffer.from(fake.key)))throw Error('Plaintext credential found');
-     await fs.rm(settingsFile,{force:true});console.log('PASS: native window, isolated preload, encrypted save and restore.');
+     await fs.rm(settingsFile,{force:true});const bridge=await win.webContents.executeJavaScript("['save','load','services','telegram','updates'].every(key=>typeof window.jarvisDesktop?.[key]==='function')");if(!bridge)throw Error('Packaged desktop bridge unavailable');console.log('PASS: native window, isolated preload, encrypted save and restore, Telegram/VK/update bridge.');
      await win.webContents.capturePage().then(img=>fs.writeFile(path.join(__dirname,'runtime','desktop-preview.png'),img.toPNG()));app.exit(0);
     }catch(error){console.error(error.message);app.exit(1);}
    });

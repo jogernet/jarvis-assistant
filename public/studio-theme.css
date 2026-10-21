@@ -65,3 +65,5 @@ button,input,textarea,select{font:inherit}button{transition:background .15s,bord
 .navigation-rail .nav.active .rail-music-icon,.navigation-rail .nav:hover .rail-music-icon{opacity:1}
 
 .message.user.provisional{opacity:.68;border-style:dashed}
+
+.title-name .app-version{font:10px Consolas,monospace;letter-spacing:0;color:#8db9d9;margin:0 10px 0 6px;white-space:nowrap}

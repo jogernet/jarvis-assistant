@@ -23,6 +23,7 @@ async function fixture(savedConfig=null,preferences={}){
  await vm.runInContext(source,context);return {elements,events,requests,saved,timers,forgotten:()=>forgotten};
 }
 const fresh=await fixture();const $=id=>fresh.elements.get(id);
+assert.equal($('quick-commands').checked,false,'Small local speech model must not execute misheard commands by default');
 assert.equal($('onboarding').hidden,false);assert.equal($('workspace').hidden,true);
 await $('connect').onclick();assert.equal(fresh.requests.length,0);
 const key='x.y/z+'.repeat(8)+'abcde';$('key').value=key;

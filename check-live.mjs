@@ -1,4 +1,5 @@
 import {Readable} from 'node:stream';
+import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import {server,registerComputer,stopComputer,shutdown} from './server.mjs';
 const instances=[],nativeCalls=[];let output='';
@@ -16,6 +17,7 @@ async function request(url,method='GET',headers={},body=''){
  await new Promise(resolve=>server.emit('request',req,{setHeader(){},writeHead(s){status=s;},end(v){content+=v||'';resolve();}}));return {status,content};
 }
 const page=await request('/');const token=page.content.match(/name="jarvis-token" content="([^"]+)/)[1];
+assert.ok(page.content.includes('v'+JSON.parse(readFileSync(new URL('./package.json',import.meta.url),'utf8')).version),'Version is visible before authentication');assert.ok(!page.content.includes('__APP_VERSION__'));
 const events=Readable.from([]);Object.assign(events,{url:'/events?token='+token,method:'GET',headers:{host:'127.0.0.1:3213'}});
 server.emit('request',events,{setHeader(){},writeHead(){},write(data){output+=data;},end(){}});
 registerComputer(async(name,args,signal)=>{nativeCalls.push(name);if(name==='type_text'&&args.text==='slow-test')return new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(new DOMException('Cancelled','AbortError')),{once:true}));return name==='screen_view'?{ok:true,image:'dGVzdA==',width:100,height:100,activeHwnd:'42'}:{ok:true,windows:[{hwnd:'42',title:'YouTube'}]};});
@@ -37,6 +39,12 @@ const debug=await request('/diagnostics','POST',{'x-jarvis-token':token},'{}');c
 socket.message({serverContent:{inputTranscription:{text:'<noise> Джарвис'}}});await flush();
 socket.message({serverContent:{inputTranscription:{text:' включи музыку <noise>'}}});await flush();
 assert.ok(output.includes('Джарвис включи музыку'));assert.ok(!output.includes('<noise>'));
+socket.message({serverContent:{turnComplete:true}});await flush();
+socket.message({serverContent:{inputTranscription:{text:'Открой телеграм'}}});await flush();
+socket.message({serverContent:{inputTranscription:{text:'Открой Telegram',finished:true}}});await flush();
+socket.message({serverContent:{inputTranscription:{text:'Покажи последние сообщения',finished:true}}});await flush();
+const captions=output.split('\n').filter(line=>line.startsWith('data: ')).map(line=>JSON.parse(line.slice(6))).filter(message=>message.serverContent?.inputTranscription).map(message=>message.serverContent.inputTranscription.displayText);
+assert.equal(captions.at(-2),'Открой Telegram');assert.equal(captions.at(-1),'Покажи последние сообщения','Finished speech must not merge into the next request');
 socket.message({serverContent:{turnComplete:true}});await flush();
 socket.message({serverContent:{inputTranscription:{text:'你好世界'}}});await flush();
 const beforeUncertain=nativeCalls.length;

@@ -20,7 +20,7 @@ function updateWakeHint(){$('wake-name-hint').textContent='Скажи «'+wakeNa
 $('wake-name-save').onclick=()=>{try{const next=window.JarvisWakeName.validate($('wake-name').value);wakeListener?.setWakeName(next);wakeName=next;$('wake-name').value=next;localStorage.setItem('jarvis-wake-name',next);updateWakeHint();if(connected)api('/wake-name',{wakeName}).catch(e=>status(e.message));$('wake-name-status').textContent='Имя сохранено: '+next;}catch(e){$('wake-name-status').textContent=e.message;}};
 $('wake-name').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();$('wake-name-save').onclick();}});
 $('wake-enabled').checked=localStorage.getItem('jarvis-wake-enabled')!=='false';
-$('quick-commands').checked=localStorage.getItem('jarvis-quick-commands')!=='false';$('quick-commands').onchange=()=>{localStorage.setItem('jarvis-quick-commands',String($('quick-commands').checked));if(utterance.length)sendUtteranceAudio(utterance.splice(0));};
+$('quick-commands').checked=localStorage.getItem('jarvis-quick-commands-v2')==='true';$('quick-commands').onchange=()=>{localStorage.setItem('jarvis-quick-commands-v2',String($('quick-commands').checked));if(utterance.length)sendUtteranceAudio(utterance.splice(0));};
 $('quick-voice-feedback').checked=localStorage.getItem('jarvis-quick-voice-feedback')==='true';$('quick-voice-feedback').onchange=()=>localStorage.setItem('jarvis-quick-voice-feedback',String($('quick-voice-feedback').checked));
 let followChat=true,controlEnabled=true,visionEnabled=true;
 function scrollChat(force=false){if(force)followChat=true;if(followChat)$('chat').scrollTop=$('chat').scrollHeight;$('scroll-latest').hidden=followChat;}
@@ -77,7 +77,7 @@ async function tryQuick(text){if(!$('quick-commands').checked)return false;const
 async function sendUtteranceAudio(chunks,end=false){const generation=audioGeneration;audioQueue=audioQueue.then(async()=>{for(let i=0;i<chunks.length;i+=6){if(!recording||!connected||generation!==audioGeneration)return;const audioChunks=chunks.slice(i,i+6).map(data=>btoa(String.fromCharCode(...new Uint8Array(data))));await api('/send',{audioChunks});}if(end&&recording&&generation===audioGeneration)await api('/send',{audioEnd:true});}).catch(e=>status(e.message));return audioQueue;}
 function previewSpeech(text){
  const stripped=window.JarvisWakeName.strip(text,wakeName).trim();
- if(!recording||!stripped||playing.size)return;
+ if(!useQuickVoice()||!recording||!stripped||playing.size)return;
  const caption=window.JarvisTranscript?.clean(stripped)||{text:stripped,uncertain:false};
  if(!caption.text||caption.uncertain)return;
  if(userBubble&&!userBubble.classList.contains?.('provisional'))return;
@@ -148,6 +148,7 @@ events.onmessage=async event=>{
  if(content.interrupted){clearAudio();assistantBubble=null;}
  if(content.inputTranscription?.displayText||content.inputTranscription?.text){const text=content.inputTranscription.displayText??content.inputTranscription.text;window.jarvisActivity?.heard(text,content.inputTranscription.finished===true);userBubble??=bubble('user','');userBubble.classList.remove('provisional');userBubble.title='';userBubble.textContent=content.inputTranscription.displayText??(window.JarvisTranscript?.merge(userBubble.textContent,text)||text);}
  if(content.inputTranscription?.text&&window.JarvisWake?.intent((userBubble?.textContent||''),true)==='sleep'){await silence();}
+ if(content.inputTranscription?.finished===true)userBubble=null;
  if(content.outputTranscription?.text&&!voiceSuppressed){assistantBubble??=bubble('assistant','');assistantBubble.textContent=content.outputTranscription.displayText??(window.JarvisTranscript?.merge(assistantBubble.textContent,content.outputTranscription.text)||content.outputTranscription.text);}
  // Audio transcripts are the public answer. Text parts may contain internal reasoning.
  for(const part of content.modelTurn?.parts||[])if(!part.thought&&part.inlineData?.data)play(part.inlineData.data);
@@ -172,8 +173,8 @@ setInterval(()=>{if(window.jarvisUiHidden||document.hidden)return;const seconds=
 window.addEventListener('pagehide',()=>{connectionWanted=false;cancelRetry();wakeListener?.close();micStream?.getTracks().forEach(t=>t.stop());events.close();});
 desktop?.onCommand?.(command=>{if(command==='microphone')$('mic').click();if(command==='diagnostics')$('nav-diagnostics').click();});
 async function boot(){
- if(!desktop){$('remember').checked=false;$('remember').disabled=true;$('storage-note').textContent='Для сохранения ключа запускай отдельное приложение через JARVIS.cmd. Голос и сообщения обрабатывает Google.';}
- try{const config=await desktop?.load();if(config?.key){connectionWanted=true;$('key').value=config.key;$('model').value=config.model||DEFAULT_MODEL;if(config.voice)$('jarvis-voice').value=config.voice;$('control').checked=config.control===true;$('vision').checked=config.vision!==false;updateSaved(true);keyChanged();showMain();status('Ключ восстановлен. Подключаюсь…');}}
+ if(!desktop){$('remember').checked=false;$('remember').disabled=true;$('storage-note').textContent='Нет связи с функциями приложения. Если это JARVIS.exe, переустанови последнюю версию. В браузере сохранение ключа недоступно.';}
+ try{const config=await desktop?.load();if(config?.key){connectionWanted=true;$('key').value=config.key;$('model').value=config.model||DEFAULT_MODEL;if(config.voice)$('jarvis-voice').value=config.voice;$('control').checked=config.control===true;$('vision').checked=config.vision!==false;$('remember').checked=true;updateSaved(true);keyChanged();showMain();status('Ключ восстановлен. Подключаюсь…');}}
  catch(e){status(e.message);}
  settingsLoaded=true;await autoConnect();desktop?.ready();console.log('JARVIS_UI_READY');
 }

@@ -12,4 +12,7 @@ caption=merge(caption,' музыку');
 assert.equal(caption,'Джарвис включи музыку');
 assert.equal(merge('ка','ка'),'ка');
 assert.equal(merge('ма','ма '),'мама ');
+assert.equal(merge('Включи музыку в','музыку в VK'),'Включи музыку в VK');
+assert.equal(merge('Открой телеграм','Открой Telegram'),'Открой Telegram');
+assert.equal(merge('Покажи сообще','ния'),'Покажи сообщения');
 console.log('PASS: noise and control-character filtering, partial tags, delta/cumulative transcription, Russian and Latin names, foreign-script uncertainty.');
