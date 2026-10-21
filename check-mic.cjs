@@ -1,0 +1,12 @@
+const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
+let Capture;const frames=[];
+vm.runInNewContext(fs.readFileSync('public/mic.js','utf8'),{AudioWorkletProcessor:class{constructor(){this.port={postMessage:buffer=>frames.push(buffer)};}},registerProcessor(name,type){assert.equal(name,'capture');Capture=type;},Int16Array,Math});
+const capture=new Capture(),samples=Float32Array.from({length:1280},(_,i)=>i%3===0?-1:i%3===1?1:.25);
+for(let i=0;i<4;i++)capture.process([[samples.subarray(i*128,(i+1)*128)]]);
+assert.equal(frames.length,0);capture.process([[samples.subarray(512,640)]]);assert.equal(frames.length,1,'First PCM frame is available at 40 ms');
+capture.process([[samples.subarray(640)]]);assert.equal(frames.length,2);const actual=frames.flatMap(buffer=>[...new Int16Array(buffer)]);
+assert.deepEqual(actual,[...samples].map(v=>Math.round(v*32767)),'No dropped or duplicated samples between frames');
+const {mayBeQuickCommand}=require('./public/quick-commands.js');
+for(const text of ['открой калькулятор','следующий трек','пауза','сделай громче','отмени последнюю команду','отк'])assert.equal(mayBeQuickCommand(text),true,text);
+for(const text of ['Джарвис напиши Кате привет','расскажи про космос','привет как дела','объясни интегралы'])assert.equal(mayBeQuickCommand(text),false,text);
+console.log('PASS: 40 ms PCM frames, continuous samples, clipping limits and early cloud routing while preserving local command prefixes.');

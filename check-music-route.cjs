@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict');const {musicToolRoute:route}=require('./music-tool-route.cjs');
+assert.equal(route('find_music',{query:'следующий трек'},'включи следующий трек').command.action,'next');
+assert.equal(route('open_app',{app:'music'},'Алиса следующий трек','Алиса').command.action,'next');
+assert.equal(route('open_url',{url:'https://music.youtube.com'},'следующий трек').command.action,'next');
+assert.equal(route('search_web',{query:'music'},'пауза').command.action,'pause');
+assert.equal(route('open_app',{app:'music'},'давай что-нибудь ещё').blocked,true);
+assert.equal(route('open_app',{app:'music'},'открой YouTube Music'),null);
+assert.equal(route('find_music',{query:'Song'},'найди песню Song'),null);
+assert.equal(route('screen_view',{},'следующий трек'),null);
+console.log('PASS: music transport commands cannot open YouTube Music; explicit service openings and song search remain available.');

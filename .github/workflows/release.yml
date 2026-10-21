@@ -1,0 +1,59 @@
+name: Build JARVIS for Windows
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install build dependencies
+        shell: pwsh
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node node_modules/electron/install.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm ci --prefix telegram-runtime --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify version matches tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $version=(Get-Content package.json -Raw|ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -ne "v$version") {throw 'Tag and package version differ'}
+      - name: Test
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path runtime -Force | Out-Null
+          npm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          powershell -NoProfile -ExecutionPolicy Bypass -File distribution/Test-Update-Archive.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Restore bundled speech model
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path public/models -Force | Out-Null
+          Invoke-WebRequest "https://github.com/$env:GITHUB_REPOSITORY/releases/download/v0.17.0/ru-small.tar.gz" -OutFile public/models/ru-small.tar.gz
+          if ((Get-FileHash public/models/ru-small.tar.gz -Algorithm SHA256).Hash -ne '5AB330B07148447D2B03358E4D057655D100B7F966A6B6203D94BD77CE849556') {throw 'Speech model integrity check failed'}
+      - name: Build installer and portable ZIP
+        run: npm run build:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-Windows
+          path: |
+            dist/JARVIS-Setup-*.exe
+            dist/JARVIS-*-win-x64.zip
+            dist/jarvis-update.json
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create $env:GITHUB_REF_NAME dist/JARVIS-Setup-*.exe dist/JARVIS-*-win-x64.zip dist/jarvis-update.json --title "JARVIS $env:GITHUB_REF_NAME" --generate-notes

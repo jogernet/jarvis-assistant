@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict'),fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto');
+const {JournalStore}=require('./journal-store.cjs');
+(async()=>{
+ const home=await fs.mkdtemp(path.join(__dirname,'runtime','test-journal-')),key=crypto.randomBytes(32),file=path.join(home,'journal.enc');
+ const encode=text=>{const iv=crypto.randomBytes(12),cipher=crypto.createCipheriv('aes-256-gcm',key,iv),bytes=Buffer.concat([cipher.update(text,'utf8'),cipher.final()]);return Buffer.concat([iv,cipher.getAuthTag(),bytes]);};
+ const decode=bytes=>{const cipher=crypto.createDecipheriv('aes-256-gcm',key,bytes.subarray(0,12));cipher.setAuthTag(bytes.subarray(12,28));return Buffer.concat([cipher.update(bytes.subarray(28)),cipher.final()]).toString('utf8');};
+ const store=new JournalStore({file,encode,decode});await store.load();await store.startSession();await store.command('add',{text:'Люблю музыку VK'});await Promise.all([store.append('user','Мой вопрос'),store.append('assistant','Мой ответ')]);await store.command('vision',{captureFps:60,adaptiveVision:false});await store.flush();
+ assert.ok(!(await fs.readFile(file)).includes(Buffer.from('Люблю музыку VK')));const restored=new JournalStore({file,encode,decode});await restored.load();assert.equal(restored.state().notes.length,1);assert.equal(restored.state().captureFps,60);assert.equal(restored.state().adaptiveVision,false);assert.deepEqual(restored.state().sessions[0].messages.map(m=>m.role),['user','assistant']);assert.ok(restored.context().includes('Мой вопрос'));assert.ok(restored.context().includes('Люблю музыку VK'));
+ await restored.command('enabled',{enabled:false});assert.equal(restored.context(),'');await restored.command('delete',{id:restored.state().notes[0].id});assert.equal(restored.state().notes.length,0);await restored.command('clear-history');assert.equal(restored.state().sessions.length,0);await assert.rejects(()=>restored.command('add',{text:'x'.repeat(1001)}));await assert.rejects(()=>restored.command('vision',{captureFps:1000}));
+ console.log('PASS: encrypted journal, ordered history, restart restoration, memory context/disable/delete, history deletion and capture setting persistence.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

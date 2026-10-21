@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import {EventEmitter} from 'node:events';
+import {PassThrough,Writable} from 'node:stream';
+import {NativeWorker} from './native-worker.mjs';
+import {ComputerSession} from './computer-session.mjs';
+import {Diagnostics} from './diagnostics.mjs';
+let starts=0;
+const children=[];
+const worker=new NativeWorker(()=>{
+ starts++;const child=new EventEmitter();child.stdout=new PassThrough();child.stderr=new PassThrough();child.kill=()=>{child.killed=true;};
+ child.stdin=new Writable({write(data,_encoding,done){const request=JSON.parse(data);if(request.action!=='wait')queueMicrotask(()=>child.stdout.write(JSON.stringify({id:request.id,result:{ok:true,title:'Окно',action:request.action}})+'\n'));done();}});
+ children.push(child);return child;
+});
+assert.equal((await worker.request('system_status',{})).ok,true);
+assert.equal((await worker.request('foreground_window',{})).title,'Окно');
+assert.equal(starts,1,'Consecutive commands must share one helper process');
+const abort=new AbortController(),waiting=worker.request('wait',{},abort.signal);abort.abort();await assert.rejects(waiting,{name:'AbortError'});assert.equal(children[0].killed,true);
+await worker.request('system_status',{});assert.equal(starts,2);worker.close();
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+let captures=0,releaseCapture;const sent=[];
+const session=new ComputerSession({execute:async(name)=>{if(name!=='screen_view')return {ok:true};captures++;if(captures===2)await new Promise(resolve=>releaseCapture=resolve);return {ok:true,image:String(captures),activeHwnd:'42'};},sendFrame:image=>sent.push({at:Date.now(),image}),notify(){}});
+session.configure(true,true);clearInterval(session.timer);
+await Promise.all([session.view(),session.view(),session.view()]);assert.equal(captures,1,'Concurrent frame requests must share a capture');
+const result=await session.call('click_screen',{x:500,y:500});assert.equal(result.verificationPending,true);assert.equal(captures,1,'Click must return before verification capture');
+await sleep(120);assert.equal(captures,2);releaseCapture();await session.verification;
+// Replace the queued frame with a more recent capture before the transmission slot.
+await session.view(false,true);await sleep(1020);
+assert.equal(sent[1].image,'3','Latest frame must replace older queued frames');
+assert.ok(sent[1].at-sent[0].at>=999,'Video must obey one frame per second');
+session.stop();assert.equal(session.sendTimer,null);
+const before=sent.length;await sleep(270);assert.equal(sent.length,before,'Stopped session must not transmit queued frames');
+let now=100;const diagnostics=new Diagnostics(()=>now);diagnostics.toolStart('a','click_screen');now=137;diagnostics.toolEnd('a','click_screen',{ok:true});assert.equal(diagnostics.snapshot().lastToolMs,37);assert.equal(diagnostics.snapshot().events[0].details.durationMs,37);
+console.log('PASS: persistent Windows worker, cancellation/restart, coalesced capture, immediate click result, newest-frame priority, 1 FPS limit, stop and tool timing.');

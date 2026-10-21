@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {Diagnostics} from './diagnostics.mjs';
+let now=1000;const diag=new Diagnostics(()=>now);
+diag.set({control:true,vision:true,connected:true});diag.captured({width:1440,height:810,activeWindow:'Test browser'},45);diag.sent('dGVzdA==');diag.audio('in',3200);
+diag.toolStart('test','type_text',{text:'SECRET_TEXT_SHOULD_NEVER_APPEAR'});diag.toolEnd('test','type_text',{ok:true});
+let snap=diag.snapshot(true);assert.equal(snap.totals.captured,1);assert.equal(snap.totals.sent,1);assert.equal(snap.pending,0);assert.equal(snap.captureFps,1);assert.ok(snap.preview.startsWith('data:image/jpeg;base64,'));assert.ok(!JSON.stringify(snap).includes('SECRET_TEXT_SHOULD_NEVER_APPEAR'));
+assert.equal(diag.snapshot().preview,undefined,'Frame preview must be opt-in');
+now=8000;snap=diag.snapshot();assert.equal(snap.captureFps,0);assert.equal(snap.sendFps,0);assert.equal(snap.totals.sent,1);
+for(let i=0;i<140;i++)diag.log('test','event');assert.equal(diag.snapshot().events.length,120);
+console.log('PASS: actual capture/send counters and FPS window, audio bytes, tool results, bounded history and text privacy.');

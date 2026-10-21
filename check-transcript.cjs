@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict');
+const {clean,merge}=require('./public/transcript.js');
+assert.equal(clean('<noise> Джарвис <noise>').text,'Джарвис');
+assert.equal(clean('[шум] <silence>\u0000\uFFFD').text,'');
+assert.equal(clean('Включи\u200B музыку <noi').text,'Включи музыку');
+assert.equal(clean('Включи Linkin Park в YouTube').uncertain,false);
+assert.equal(clean('你好世界').uncertain,true);
+assert.equal(clean('Позвони Ване').uncertain,false);
+let caption=merge('Джарвис',' включи');
+caption=merge(caption,'Джарвис включи музыку');
+caption=merge(caption,' музыку');
+assert.equal(caption,'Джарвис включи музыку');
+assert.equal(merge('ка','ка'),'ка');
+assert.equal(merge('ма','ма '),'мама ');
+console.log('PASS: noise and control-character filtering, partial tags, delta/cumulative transcription, Russian and Latin names, foreign-script uncertainty.');

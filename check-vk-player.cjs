@@ -1,0 +1,21 @@
+const assert=require('node:assert/strict'),vm=require('node:vm');
+const {controlVolume,controlPlayer,probeScript,bridgeScript,confirmed}=require('./vk-player-bridge.cjs');
+(async()=>{
+ let playing=false,track=1,clock=15,change=true,gesture=false;const events=[];
+ let volume=.5;const player={getVolume:()=>volume,setVolume:value=>{volume=value;},isPlaying:()=>playing,getCurrentTime:()=>clock,getCurrentAudio:()=>({id:String(track),artist:'Artist',title:'Track '+track}),play(){playing=true;},pause(){playing=false;},playNext(){if(change)track++;},playPrev(){if(change)track--;}};
+ const context=vm.createContext({window:{getAudioPlayer:()=>player},location:{pathname:'/audios123',hostname:'vk.ru'},document:{querySelectorAll:()=>[]},navigator:{mediaSession:{}},innerWidth:1100,innerHeight:800,getComputedStyle:()=>({display:'block',visibility:'visible'})});
+ const win={show(){},focus(){},webContents:{async executeJavaScript(code,userGesture){if(code.includes(')("invoke",'))gesture=userGesture;return vm.runInContext(code,context);}}};
+ let volumeResult=await controlVolume(win,'volume_up',{}, {delay:async()=>{}});assert.equal(volumeResult.volume,60);volumeResult=await controlVolume(win,'volume_down',{step:80},{delay:async()=>{}});assert.equal(volumeResult.volume,0);volumeResult=await controlVolume(win,'set_volume',{volume:72},{delay:async()=>{}});assert.equal(volumeResult.volume,72);assert.equal((await controlVolume(win,'set_volume',{volume:101})).ok,false);
+ assert.equal((await win.webContents.executeJavaScript(probeScript)).login,'signed-in');
+ let result=await controlPlayer(win,'play',{delay:async()=>{}});assert.equal(result.ok,true);assert.equal(result.verified,true);assert.equal(gesture,true,'Playback API must run with a user gesture');
+ result=await controlPlayer(win,'next',{delay:async()=>{}});assert.equal(result.verified,true);assert.equal(track,2);assert.ok(result.title.includes('Track 2'));
+ result=await controlPlayer(win,'previous',{delay:async()=>{}});assert.equal(result.verified,true);assert.equal(track,1);
+ result=await controlPlayer(win,'pause',{delay:async()=>{}});assert.equal(result.playback,'paused');assert.equal(playing,false);
+ change=false;result=await controlPlayer(win,'next',{delay:async()=>{},attempts:2});assert.equal(result.ok,false,'A click without track change must never report success');change=true;
+ const button={getBoundingClientRect:()=>({left:100,top:50,width:30,height:30}),getAttribute:()=>'',closest:()=>null,contains:other=>other===button};
+ context.document.querySelectorAll=selector=>selector==='.audio_page_player_next'?[button]:[];context.document.elementFromPoint=()=>button;
+ win.webContents.sendInputEvent=event=>{events.push(event);if(event.type==='mouseUp')track++;};win.webContents.getZoomFactor=()=>1.25;
+ result=await controlPlayer(win,'next',{delay:async()=>{}});assert.equal(result.verified,true);assert.deepEqual(events.map(e=>e.type),['mouseMove','mouseDown','mouseUp']);assert.equal(events[1].x,144);assert.equal(events[1].y,81);
+ assert.equal(confirmed('next',{trackId:'same'},{trackId:'same',playback:'playing'}),false);assert.equal(confirmed('previous',{position:30},{position:0}),true);
+ console.log('PASS: detached VK player, play/pause/next/previous, user gesture, verified track changes, trusted button click with zoom and no false success.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

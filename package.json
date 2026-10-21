@@ -1,0 +1,16 @@
+{
+  "name": "jarvis-gemini-desktop",
+  "version": "0.17.0",
+  "private": true,
+  "main": "desktop.cjs",
+  "description": "JARVIS personal desktop assistant",
+  "scripts": {
+    "start": "electron .",
+    "test": "node check.mjs && node check-desktop.mjs && node check-services.cjs && node check-services-ui.cjs && node check-quick-commands.cjs && node check-quick-live.mjs && node check-voice-ui.cjs && node check-wake.cjs && node check-adaptive-vision.mjs && node check-journal.cjs && node check-system.mjs && node check-targeting.mjs && node check-studio.cjs && node check-live.mjs && node check-memory-live.mjs && node check-performance.mjs && node check-vk-player.cjs && node check-vk-library.cjs && node check-feedback.cjs && node check-diagnostics.mjs && node check-tray.cjs && node check-vk-hover.cjs && node check-spotify.cjs && node check-spotify-ui.cjs && node check-wake-name.cjs && node check-music-route.cjs && node check-actions-messengers.mjs && node check-telegram.cjs && node check-telegram-ui.cjs && node check-telegram-connection.cjs && node check-telegram-qr.cjs && node check-messenger-features.mjs && node check-messenger-ui.cjs && node check-layout.cjs && node check-chat-selection.mjs && node check-neural-icon.cjs && node check-transcript.cjs && node check-voice-meter.cjs && node check-messenger-state.mjs && node check-mic.cjs && node check-update.cjs",
+    "telegram:install": "npm install --prefix telegram-runtime telegram@2.26.22 qrcode@1.5.4 --save-exact --ignore-scripts --no-audit --no-fund",
+    "build:win": "powershell -NoProfile -ExecutionPolicy Bypass -File distribution/Build-Release.ps1"
+  },
+  "devDependencies": {
+    "electron": "44.9.0"
+  }
+}

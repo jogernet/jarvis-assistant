@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {MessengerService} from './messenger-service.mjs';
+import {ActionCenter} from './action-center.mjs';
+const require=createRequire(import.meta.url),{TelegramService,loadSdk}=require('./telegram-service.cjs'),{score}=require('./chat-match.cjs');
+const sdk=loadSdk(),cat={id:201n,className:'User',firstName:'Катя',lastName:'911',username:'katya_test'},one={id:202n,className:'User',firstName:'Alex',username:'alex_a'},two={id:203n,className:'User',firstName:'Alex',username:'alex_b'};
+let sends=0,contacts=0;const client={connected:true,getDialogs:async()=>[{entity:cat,name:'Катя 911'},{entity:one,name:'Alex'},{entity:two,name:'Alex'}],getEntity:async()=>{throw Object.assign(Error('no username'),{errorMessage:'USERNAME_NOT_OCCUPIED'});},getPeerId:async e=>String(e.id),getInputEntity:async e=>new sdk.Api.InputPeerUser({userId:e.id,accessHash:0n}),invoke:async request=>{if(request instanceof sdk.Api.contacts.GetContacts){contacts++;return {users:[]};}assert.ok(request instanceof sdk.Api.messages.SendMessage);assert.equal(String(request.peer.userId),'201');assert.equal(request.message,'Привет');sends++;return new sdk.Api.UpdateShortSentMessage({id:42,date:1,pts:1,ptsCount:1,out:true});}};
+const telegram=new TelegramService({home:'runtime',encode:x=>x,decode:x=>x});telegram.client=client;telegram.phase='connected';
+const messenger=new MessengerService((name,args,signal)=>telegram.command(name,args,signal),new ActionCenter());
+let found=await messenger.command({service:'telegram',action:'search',query:'Катя911'});assert.equal(found.candidates.length,1);assert.equal(found.candidates[0].match,'exact');
+let selected=await messenger.command({service:'telegram',action:'select',id:'Катя 911'});assert.equal(selected.chatKey,'tg:201');assert.equal(selected.draftText,'');
+await messenger.command({service:'telegram',action:'draft',text:'Привет'});await messenger.command({service:'telegram',action:'send'},{userRequest:'напиши Кате 911 Привет'});assert.equal(sends,1,'Selecting a returned name must reach the actual send adapter, not repeat search');
+found=await messenger.command({service:'telegram',action:'search',query:'Кате 911'});assert.equal(found.candidates.length,1,'A declined Russian name is offered as a similar result');assert.equal(found.candidates[0].match,'similar');
+selected=await messenger.command({service:'telegram',action:'select',id:'Катя911'});assert.equal(selected.chatKey,'tg:201');
+found=await messenger.command({service:'telegram',action:'search',query:'Alex'});assert.equal(found.candidates.length,2);await assert.rejects(()=>messenger.command({service:'telegram',action:'select',id:'Alex'}),/несколько чатов/);
+selected=await messenger.command({service:'telegram',action:'select',id:'@alex_b'});assert.equal(selected.chatKey,'tg:203');assert.equal(contacts,1,'Contacts are cached, not refetched on every search');
+assert.equal(score('Ежик 7',['Ёжик7']),98);assert.equal(score('911 Катя',['Катя911'])>0,true);
+console.log('PASS: screenshot regression (unique returned name instead of technical ID), search-select-draft-send, spaces/digits, declined names as candidates, duplicate-name protection, username selection and contact caching.');

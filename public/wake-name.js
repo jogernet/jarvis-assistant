@@ -1,0 +1,10 @@
+(function(root){
+ const normalize=text=>String(text||'').toLowerCase().replace(/ё/g,'е').replace(/[^a-zа-я\s]/g,' ').replace(/\s+/g,' ').trim();
+ const defaults=['джарвис','джарвиса','джарвису','джарвисом','джарвисе','джервис','джервиса','джервису','джервисом','жарвис','жарвиса','жарвису','джарви','jarvis'];
+ for(const vowel of ['а','е','э'])for(const second of ['и','е','э'])for(const consonant of ['с','з'])for(const ending of ['','а','у','ом','е'])defaults.push('дж'+vowel+'рв'+second+consonant+ending);
+ function validate(value){if(typeof value!=='string'||!value.trim()||value.trim().length>40||!/^[а-яёa-z -]+$/i.test(value))throw Error('Впиши имя буквами, до 40 символов.');const name=value.trim().replace(/\s+/g,' '),plain=normalize(name);if(!plain||plain.split(' ').length>4||/(^| )(?:стоп|молчи|замолчи|заткнись|помолчи|выключи|отключи|пауза)( |$)/.test(plain))throw Error('Выбери имя, которое не совпадает с командой остановки.');return name;}
+ function aliases(value='Джарвис'){const name=normalize(validate(value));if(defaults.includes(name))return [...new Set(defaults)];const result=[name];if(/^[а-я]+$/.test(name)){if(/[бвгджзклмнпрстфхцчшщ]$/.test(name))result.push(name+'а',name+'у',name+'ом',name+'е');else if(name.endsWith('а')){const stem=name.slice(0,-1);result.push(stem+'ы',stem+'е',stem+'у',stem+'ой');}else if(name.endsWith('я')){const stem=name.slice(0,-1);result.push(stem+'и',stem+'е',stem+'ю',stem+'ей');}}return [...new Set(result)];}
+ function matches(text,names){const value=' '+normalize(text)+' ';return names.some(name=>value.includes(' '+name+' '));}
+ function strip(text,value='Джарвис'){const names=aliases(value).sort((a,b)=>b.length-a.length),candidate=text.replace(/^(?:эй|привет) /,'');for(const name of names)if(candidate===name||candidate.startsWith(name+' '))return candidate.slice(name.length).trim();return text;}
+ const api={normalize,validate,aliases,matches,strip};if(typeof module!=='undefined')module.exports=api;else root.JarvisWakeName=api;
+})(typeof window!=='undefined'?window:globalThis);

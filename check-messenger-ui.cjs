@@ -1,0 +1,37 @@
+const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
+(async()=>{
+ const elements=new Map(),listeners=new Map(),calls=[],panels=[];let deferredSearch=null;
+ const element=()=>({value:'',hidden:false,disabled:false,textContent:'',children:[],handlers:{},append(el){this.children.push(el);},replaceChildren(){this.children=[];},scrollIntoView(){this.scrolled=true;},addEventListener(name,fn){this.handlers[name]=fn;},click(){return this.onclick?.();}});
+ const html=fs.readFileSync('public/index.html','utf8');for(const m of html.matchAll(/id="([^"]+)"/g)){assert.ok(!elements.has(m[1]),'Duplicate ID '+m[1]);elements.set(m[1],element());}
+ const $=id=>{assert.ok(elements.has(id),'Missing '+id);return elements.get(id);};$('messenger-provider').value='telegram';
+ const window={addEventListener(name,fn){if(!listeners.has(name))listeners.set(name,[]);listeners.get(name).push(fn);},dispatchEvent(event){if(event.type==='jarvis:panel')panels.push(event.detail);for(const fn of listeners.get(event.type)||[])fn(event);}};
+ const fetch=async(url,options)=>{const data=JSON.parse(options.body);calls.push({url,data});let result={ok:true};
+ if(url==='/messenger'&&data.action==='search'&&deferredSearch)return await deferredSearch;
+ if(url==='/actions')result={history:[],canUndo:false};
+ if(data.action==='draft')result={ok:true,service:'telegram',chat:'Alex',draftText:data.text};
+ if(data.action==='send')result={ok:true,service:'telegram',chat:'Alex',submitted:true,draftText:''};
+ if(data.action==='latest_incoming'||data.action==='unread_recent')result={ok:true,service:'telegram',text:'От Alice: привет',scope:'inbox'};
+ return {ok:true,json:async()=>result};};
+ vm.runInNewContext(fs.readFileSync('public/workspace-ui.js','utf8'),{window,document:{getElementById:$,querySelector:()=>({content:'token'}),createElement:element},fetch,AbortSignal:{timeout:()=>null},CustomEvent:class{constructor(type,options){this.type=type;this.detail=options.detail;}},localStorage:{getItem(){return null;},setItem(){}}});
+ await new Promise(r=>setImmediate(r));
+ const content='<b>Visible draft, never HTML</b>';
+ window.dispatchEvent({type:'jarvis:messenger',detail:{service:'telegram',chat:'Alex',draftText:content}});
+ assert.equal($('messenger-text').value,content);assert.equal($('messenger-draft-recipient').textContent,'Кому: Alex');assert.equal($('messenger-draft-editor').scrolled,true);assert.ok(panels.includes('messengers'));assert.equal($('messenger-send').disabled,false);
+ assert.ok(html.indexOf('id="messenger-draft-editor"')<html.indexOf('id="telegram-connection"'),'Draft is above setup controls');
+ $('messenger-text').value='Edited visible text';$('messenger-text').handlers.input();
+ await $('messenger-send').onclick();
+ const messaging=calls.filter(c=>c.url==='/messenger');assert.deepEqual(messaging.slice(-2).map(c=>c.data.action),['draft','send']);assert.equal(messaging.at(-2).data.text,'Edited visible text');assert.equal($('messenger-send').disabled,true);assert.match($('messenger-draft-status').textContent,/отправлено/);
+ $('messenger-provider').value='discord';$('messenger-provider').onchange();assert.equal($('messenger-latest').disabled,true);assert.equal($('messenger-text').value,'');
+ $('messenger-provider').value='telegram';$('messenger-provider').onchange();await $('messenger-latest').onclick();assert.equal(calls.at(-1).data.action,'latest_incoming');assert.equal($('messenger-content').textContent,'От Alice: привет');
+ await $('messenger-unread').onclick();assert.equal(calls.at(-1).data.minutes,60);await $('messenger-delete-last').onclick();assert.equal(calls.at(-1).data.action,'delete_sent');
+ let resolveSearch;deferredSearch=new Promise(resolve=>{resolveSearch=resolve;});
+ $('messenger-query').value='Alex';const waiting=$('messenger-search').onclick();
+ $('messenger-provider').value='discord';$('messenger-provider').onchange();
+ resolveSearch({ok:true,json:async()=>({ok:true,service:'telegram',candidates:[{id:'M1',name:'Wrong provider'}]})});await waiting;
+ assert.equal($('messenger-candidates').children.length,0,'A late Telegram response must not populate Discord');
+ assert.equal($('messenger-provider').value,'discord');
+ window.dispatchEvent({type:'jarvis:messenger',detail:{service:'telegram',chat:'Alex',draftText:'New voice draft'}});
+ assert.equal($('messenger-provider').value,'telegram');assert.equal($('messenger-latest').disabled,false,'Voice provider switch restores Telegram controls');
+ window.dispatchEvent({type:'jarvis:messenger',detail:{service:'telegram',text:''}});assert.equal($('messenger-content').textContent,'','Empty reads clear stale content');
+ console.log('PASS: visible draft, edit-before-send, global inbox, exact delete, late-response isolation, voice provider switch and empty read state.');
+})().catch(error=>{console.error(error);process.exitCode=1;});

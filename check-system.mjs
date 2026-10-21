@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import {validateSystemAction,publicServerMessage} from './system-tools.mjs';
+import {ComputerSession} from './computer-session.mjs';
+assert.equal(validateSystemAction('focus_window',{hwnd:'12345'}).name,'focus_window');
+assert.equal(validateSystemAction('press_key',{key:'CTRL+L'}).args.key,'CTRL+L');
+assert.throws(()=>validateSystemAction('click_screen',{x:1001,y:1}));
+assert.throws(()=>validateSystemAction('focus_window',{hwnd:'1; calc.exe'}));
+assert.throws(()=>validateSystemAction('type_text',{text:'x'.repeat(6001)}));
+assert.throws(()=>validateSystemAction('scroll_screen',{x:0,y:0,amount:100}));
+assert.throws(()=>validateSystemAction('click_screen',{x:1,y:1,command:'cmd.exe'}));
+const clean=publicServerMessage({toolCall:{functionCalls:[]},serverContent:{modelTurn:{parts:[{text:'private',thought:true},{text:'private without flag'},{inlineData:{data:'public-audio'}},{text:'hidden',thoughtSignature:'sig'}]},outputTranscription:{text:'Публичный ответ'}}});
+assert.equal(clean.toolCall,undefined);assert.equal(clean.serverContent.modelTurn.parts.length,1);assert.equal(clean.serverContent.outputTranscription.text,'Публичный ответ');
+const calls=[],frames=[];const session=new ComputerSession({execute:async(name,args,signal,hwnd,display)=>{
+ assert.equal(signal.aborted,false);calls.push({name,args,hwnd,display});return name==='screen_view'?{ok:true,image:'aW1hZ2U=',width:1440,height:810,activeHwnd:'12345',display:{left:0,top:0,width:2560,height:1440}}:{ok:true};
+},sendFrame:data=>frames.push(data),notify(){}});
+session.configure(true,true);
+await assert.rejects(()=>session.call('click_screen',{x:500,y:500}),/снимок/);
+await session.view();assert.equal(frames.length,1);
+const result=await session.call('click_screen',{x:500,y:500});assert.equal(result.verificationPending,true);assert.equal(frames.length,1,'Click response must not wait for verification frame');await session.verification;await new Promise(r=>setTimeout(r,1020));
+const click=calls.find(c=>c.name==='click_screen');assert.equal(click.hwnd,'12345');assert.deepEqual(click.display,{left:0,top:0,width:2560,height:1440});assert.equal(frames.length,2,'Mutation must be followed by a new screenshot');
+session.stop();await assert.rejects(()=>session.call('type_text',{text:'test'}),/остановлено/);
+assert.equal(session.vision,false);assert.equal(session.control,false);
+console.log('PASS: validated native actions, reasoning removed, fresh screenshots, normalized coordinates, foreground binding, emergency stop.');

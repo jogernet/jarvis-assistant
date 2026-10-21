@@ -1,0 +1,14 @@
+runtime/
+dist/
+release-source/
+public/models/*.tar.gz
+node_modules/
+telegram-runtime/node_modules/
+*.enc
+*.log
+.env
+.env.*
+JARVIS.exe
+JARVIS-Admin.exe
+WindowsControl*.exe
+!WindowsControl-v9.exe
