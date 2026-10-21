@@ -17,9 +17,17 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive=Join-Path $root ('dist/JARVIS-'+$version+'-win-x64.zip')
 if($Rebuild -and (Test-Path -LiteralPath $archive)){Remove-Item -LiteralPath $archive}
 [IO.Compression.ZipFile]::CreateFromDirectory($folder,$archive,[IO.Compression.CompressionLevel]::Optimal,$false)
+$archiveCheck=[IO.Compression.ZipFile]::OpenRead($archive)
+try {
+ $bridgeEntry=@($archiveCheck.Entries | Where-Object {$_.FullName.Replace('\','/') -eq ('versions/'+$version+'/resources/app/preload.cjs')})
+ if($bridgeEntry.Count -ne 1 -or $bridgeEntry[0].Length -eq 0){throw 'Packaged Electron bridge is missing'}
+ if(@($archiveCheck.Entries | Where-Object {$_.FullName -match '\.enc$|desktop-profile|test-profile'}).Count){throw 'Private profile files found in archive'}
+} finally {$archiveCheck.Dispose()}
 $setup=Join-Path $root ('dist/JARVIS-Setup-'+$version+'.exe')
 & $compiler /nologo /codepage:65001 /target:winexe ('/out:'+$setup) ('/win32icon:'+$icon) ('/resource:'+$archive+',payload.zip') ('/resource:'+(Join-Path $PSScriptRoot 'TERMS-RU.txt')+',terms.txt') /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll (Join-Path $PSScriptRoot 'Installer.cs')
 if ($LASTEXITCODE -ne 0) {throw 'Installer compilation failed'}
+$installerCheck=Start-Process -FilePath $setup -ArgumentList '--self-test' -WindowStyle Hidden -Wait -PassThru
+if($installerCheck.ExitCode -ne 0){throw ('Installer self-test failed: '+$installerCheck.ExitCode)}
 $manifest=@{version=$version;platform='win32-x64';file=[IO.Path]::GetFileName($archive);size=(Get-Item -LiteralPath $archive).Length;sha256=(Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()}
 [IO.File]::WriteAllText((Join-Path $root 'dist/jarvis-update.json'),($manifest | ConvertTo-Json),(New-Object Text.UTF8Encoding($false)))
 Write-Output ('READY: '+$setup)

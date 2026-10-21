@@ -16,7 +16,7 @@ async function fixture(savedConfig=null,preferences={}){
   window:{JarvisWakeName:wakeNames,JarvisCommands:requireParser,jarvisDesktop:api,addEventListener(){}},console:{log(){}},
   EventSource:class{constructor(){events.push(this);}close(){}},
   AudioContext:class{createGain(){return {gain:{value:1,setTargetAtTime(){}},connect(){}};}resume(){return new Promise(()=>{});}},
-  localStorage:{getItem:key=>preferences[key]??null,setItem(key,value){preferences[key]=value;assert.ok(['jarvis-output-volume','jarvis-wake-enabled','jarvis-quick-commands','jarvis-quick-voice-feedback','jarvis-wake-name','jarvis-voice'].includes(key),'Only public voice preferences may use renderer storage');}},
+  localStorage:{getItem:key=>preferences[key]??null,setItem(key,value){preferences[key]=value;assert.ok(['jarvis-output-volume','jarvis-wake-enabled','jarvis-quick-commands-v2','jarvis-quick-voice-feedback','jarvis-wake-name','jarvis-voice'].includes(key),'Only public voice preferences may use renderer storage');}},
   AbortSignal,Date,setTimeout:(fn,delay)=>{timers.set(++timerId,{fn,delay});return timerId;},clearTimeout:id=>timers.delete(id),setInterval(){},
   fetch:async(path,options)=>{requests.push({path,body:JSON.parse(options.body)});return {ok:true,json:async()=>path==='/connection'?{connected:true}:{ok:true}};},
  });
