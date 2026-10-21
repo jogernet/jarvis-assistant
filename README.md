@@ -1,5 +1,7 @@
 # JARVIS for Windows
 
+![Интерфейс JARVIS](assets/jarvis-interface.png)
+
 Персональный голосовой ассистент с Gemini Live, локальным пробуждением, управлением Windows, Telegram и музыкальными сервисами.
 
 ## Для пользователей
